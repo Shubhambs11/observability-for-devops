@@ -1,98 +1,74 @@
-# Observability-For-DevOps
+# Observability Stack for DevOps
 
-This repository provides a comprehensive observability stack tailored for DevOps engineers. It integrates key tools like Prometheus, Grafana, cAdvisor, and Node Exporter to monitor, visualize, and manage your infrastructure and applications. Additionally, it includes a custom Notes App to demonstrate the observability stack in action.
+Metrics, logs, and traces — one `docker compose up` away.
 
 ![Docker + cAdvisor Stack](assets/docker.png)
 ![NodeExporter Stack](assets/nodeexporter.png)
 
-## Table of Contents
-- [Overview](#overview)
-- [Tech Stack](#tech-stack)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Services](#services)
-- [Volumes](#volumes)
-- [Network](#network)
-- [Monitoring Setup](#monitoring-setup)
-- [Contributing](#contributing)
-- [License](#license)
+## What's in the box
 
-## Overview
-In modern DevOps, observability is key to ensuring the health and performance of your applications and infrastructure. This repository sets up an observability stack that includes metrics collection, container monitoring, and real-time visualization.
+```
+Prometheus  ← scrapes ← Node Exporter, cAdvisor, OTEL Collector
+Loki        ← pushes  ← Promtail (container logs)
+OTEL        ← OTLP    → exports metrics to Prometheus
+Grafana     → queries  → Prometheus + Loki (auto-provisioned)
+Notes App   → demo workload
+```
 
-## Tech Stack
-- **Docker & Docker Compose**: Containerization and orchestration.
-- **Prometheus**: Metrics collection and monitoring.
-- **Grafana**: Data visualization and dashboard creation.
-- **cAdvisor**: Container resource monitoring.
-- **Node Exporter**: Hardware and OS metrics exporter.
-- **Notes App**: A custom service to demonstrate monitoring.
+## Quick start
 
-## Features
-- Real-time monitoring of container metrics with Prometheus.
-- Visualize metrics using Grafana dashboards.
-- Monitor hardware, OS metrics, and custom application performance.
-- Easily extendable for additional services and metrics.
-- Persistent data storage for Prometheus and Grafana.
+```bash
+git clone https://github.com/yourusername/Observability-For-DevOps.git
+cd Observability-For-DevOps
+docker compose up -d
+```
 
-## Installation
+That's it. Open http://localhost:3000 (admin/admin).
 
-1. **Clone the repository**:
-    ```bash
-    git clone https://github.com/yourusername/Observability-For-DevOps.git
-    cd Observability-For-DevOps
-    ```
+## Endpoints
 
-2. **Ensure Docker and Docker Compose are installed**:
-    - [Docker Installation Guide](https://docs.docker.com/get-docker/)
-    - [Docker Compose Installation Guide](https://docs.docker.com/compose/install/)
+| Service | URL | What it does |
+|---------|-----|--------------|
+| Grafana | [:3000](http://localhost:3000) | Dashboards for metrics + logs |
+| Prometheus | [:9090](http://localhost:9090) | Metrics store, check `/targets` |
+| Loki | [:3100](http://localhost:3100) | Log aggregation backend |
+| cAdvisor | [:8080](http://localhost:8080) | Container resource metrics |
+| OTEL Collector | `:4317` gRPC / `:4318` HTTP | Send OTLP traces, metrics, logs |
+| Notes App | [:8000](http://localhost:8000) | Sample Django app |
 
-3. **Download Prometheus config file**:
-    ```bash
-    wget https://raw.githubusercontent.com/prometheus/prometheus/main/documentation/examples/prometheus.yml
-    ```
-    
-4. **Run the stack**:
-    ```bash
-    docker compose up -d
-    ```
+Node Exporter and Promtail run internally (no exposed ports needed).
 
-## Usage
+## Sending traces to OTEL
 
-- Access **Grafana** at `http://localhost:3000`
-  - Default credentials: `admin` / `admin` (you'll be prompted to change this)
-- Access **Prometheus** at `http://localhost:9090`
-- Access **cAdvisor** at `http://localhost:8080`
-- **Node Exporter** metrics will be available at `http://localhost:9100/metrics`
-- Access **Notes App** at `http://localhost:8000`
+The collector accepts OTLP on ports 4317 (gRPC) and 4318 (HTTP). Point your instrumented app at it:
 
-## Services
+```bash
+# quick test
+curl -X POST http://localhost:4318/v1/traces \
+  -H 'Content-Type: application/json' \
+  -d '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"my-app"}}]},"scopeSpans":[{"spans":[{"traceId":"aaaabbbbccccddddaaaabbbbccccdddd","spanId":"aaaabbbbccccdddd","name":"test","kind":1,"startTimeUnixNano":"1000000000","endTimeUnixNano":"2000000000","status":{}}]}]}]}'
+```
 
-- **Grafana**: Visualization tool for Prometheus data.
-- **Prometheus**: Collects and stores metrics.
-- **Node Exporter**: Exports hardware and OS-level metrics.
-- **cAdvisor**: Provides container resource usage and performance metrics.
-- **Notes App**: Sample application to demonstrate monitoring.
+Metrics from OTLP get exported to Prometheus. Traces go to debug logs (swap in Jaeger/Tempo when ready).
 
-## Volumes
+## Project structure
 
-- `prometheus_data`: Stores Prometheus data persistently.
-- `grafana_data`: Stores Grafana dashboards and data persistently.
+```
+.
+├── docker-compose.yml
+├── prometheus.yml                          # scrape config
+├── otel-collector/otel-collector-config.yml
+├── loki/loki-config.yml
+├── promtail/promtail-config.yml
+├── grafana/provisioning/
+│   ├── datasources/datasources.yml         # Prometheus + Loki
+│   └── dashboards/dashboards.yml           # drop JSON files in dashboards/json/
+└── notes-app/                              # Django demo app
+```
 
-## Network
+## Tear down
 
-- **monitoring**: Custom bridge network to ensure isolation and communication between services.
-
-## Monitoring Setup
-
-- **Grafana Dashboards**: Pre-configured to visualize data from Prometheus.
-- **Prometheus Configuration**: Configured to scrape metrics from Node Exporter, cAdvisor, and Notes App.
-
-## Contributing
-
-Contributions are welcome! Please submit a pull request or open an issue for any changes or improvements.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+docker compose down          # stop everything
+docker compose down -v       # stop + delete all data
+```
