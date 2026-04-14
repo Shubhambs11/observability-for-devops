@@ -88,6 +88,8 @@ services:
     command: -config.file=/etc/promtail/config.yaml
     depends_on:
       - loki
+    expose:
+      - 9080
     networks:
       - monitoring
     restart: unless-stopped
